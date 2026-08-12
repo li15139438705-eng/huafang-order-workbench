@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>华方挂单工作台</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="authGate" class="auth-gate" hidden>
+      <form id="authForm" class="auth-card">
+        <div class="brand-mark">HF</div>
+        <h1>华方挂单工作台</h1>
+        <p>登录后，家里和公司的数据会同步到同一份云端底稿。</p>
+        <label>
+          <span>邮箱</span>
+          <input id="authEmail" type="email" autocomplete="email" placeholder="请输入常用邮箱" required />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="authPassword" type="password" autocomplete="current-password" minlength="8" placeholder="至少 8 位" required />
+        </label>
+        <div class="auth-actions">
+          <button id="signInBtn" class="primary-button" type="submit">登录</button>
+          <button id="signUpBtn" class="secondary-button" type="button">首次注册</button>
+        </div>
+        <div id="authMessage" class="message"></div>
+      </form>
+    </div>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">HF</div>
+          <div>
+            <h1>华方挂单工作台</h1>
+            <p>报价、挂单、成交、回单</p>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" aria-label="工作流">
+          <button class="nav-tab active" data-view="quotes">报单结构</button>
+          <button class="nav-tab" data-view="orders">挂单核对</button>
+          <button class="nav-tab" data-view="deals">挂单登记</button>
+          <button class="nav-tab" data-view="receipts">回单制作</button>
+          <button class="nav-tab" data-view="ledger">登记表</button>
+          <button class="nav-tab" data-view="settings">系统设置</button>
+        </nav>
+
+        <div class="status-box">
+          <span class="status-dot"></span>
+          <span id="storageStatus">本地保存已开启</span>
+        </div>
+        <button id="signOutBtn" class="sign-out-button" type="button" hidden>退出登录</button>
+      </aside>
+
+      <main class="workspace">
+        <section class="topbar">
+          <div>
+            <label for="workDate">业务日期</label>
+            <input id="workDate" type="date" />
+          </div>
+          <div>
+            <label for="contractCode">合约</label>
+            <input id="contractCode" type="text" value="SS2609" />
+          </div>
+          <div>
+            <label for="futureCompany">备用期货公司（可空）</label>
+            <input id="futureCompany" type="text" value="" placeholder="不自动默认，按封存结构匹配" />
+          </div>
+          <button id="clearAllBtn" class="danger-button">清空本地数据</button>
+        </section>
+        <div id="dateMessage" class="message top-message"></div>
+
+        <section id="quotes" class="view active">
+          <div class="section-head">
+            <div>
+              <h2>报单结构</h2>
+              <p>按期货公司录入结构，解析候选结构后，把需要的结构封存为当天挂单库。</p>
+            </div>
+            <div class="button-row">
+              <button id="extractQuotesBtn" class="primary-button">提取候选结构</button>
+              <button id="sealSelectedBtn" class="secondary-button">封存选中结构</button>
+            </div>
+          </div>
+
+          <div class="quote-import">
+            <label>
+              <span>期货公司</span>
+              <input id="quoteCompany" type="text" placeholder="例如：华泰、东证、海证" />
+            </label>
+            <label>
+              <span>品种</span>
+              <select id="quoteProduct">
+                <option value="冷轧">冷轧</option>
+                <option value="热轧">热轧</option>
+              </select>
+            </label>
+            <label>
+              <span>累购华方报价</span>
+              <input id="buyBasisInput" type="number" value="-100" />
+            </label>
+            <label>
+              <span>累沽华方报价</span>
+              <input id="sellBasisInput" type="number" value="-450" />
+            </label>
+            <label class="wide full-row">
+              <span>我的需求</span>
+              <input id="quoteDemand" type="text" placeholder="例如：只要40天8.25到期，累购上区间150/300，累沽下区间150/300" />
+            </label>
+          </div>
+
+          <div class="quote-stage">
+            <div>
+              <textarea id="quoteInput" class="structure-input" spellcheck="false" placeholder="把你最终要用的结构粘贴到这里。例如：&#10;7.1日&#10;二倍，40个交易日，8.25到期&#10;熔断累购：&#10;上区间 09+150，下区间 09-355，现货毛基09-435，敲出赔付100"></textarea>
+            </div>
+            <div class="panel">
+              <h3>候选结构</h3>
+              <p class="subtle">这里显示从当前录入内容中提取到的结构，勾选后封存。</p>
+              <div class="table-wrap mini-table-wrap">
+                <table id="candidateTable"></table>
+              </div>
+            </div>
+          </div>
+
+          <div id="quoteMessage" class="message"></div>
+          <div class="section-subhead">
+            <h3>已封存挂单库</h3>
+            <button id="clearSealedBtn" class="danger-button">清空封存库</button>
+          </div>
+          <div class="table-wrap">
+            <table id="quoteTable"></table>
+          </div>
+        </section>
+
+        <section id="orders" class="view">
+          <div class="section-head">
+            <div>
+              <h2>挂单核对</h2>
+              <p>粘贴客户挂单，系统核对结构，匹配后生成发期货公司群的格式。</p>
+            </div>
+            <div class="button-row">
+              <button id="clearOrderInputBtn" class="secondary-button">清空挂单</button>
+              <button id="checkOrderBtn" class="primary-button">核对挂单</button>
+            </div>
+          </div>
+
+          <textarea id="orderInput" class="large-input" spellcheck="false" placeholder="粘贴客户挂单消息"></textarea>
+          <div id="orderMessage" class="message"></div>
+          <div class="split-layout">
+            <div class="panel">
+              <h3>识别结果</h3>
+              <dl id="orderParsed" class="details-list"></dl>
+            </div>
+            <div class="panel">
+              <div class="panel-head">
+                <h3>期货公司格式</h3>
+                <div class="button-row">
+                  <button id="copyStandardBtn" class="secondary-button">复制</button>
+                  <button id="registerOrderBtn" class="primary-button">登记挂单</button>
+                </div>
+              </div>
+              <div id="orderRoute" class="route-banner" hidden></div>
+              <pre id="standardOutput" class="output-box"></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="deals" class="view">
+          <div class="section-head">
+            <div>
+              <h2>挂单登记</h2>
+              <p>挂单后立即登记；价格到达后，在这里把状态改成成交，也可以手动改入场价。</p>
+            </div>
+            <div id="closePriceControls" class="close-price-controls"></div>
+          </div>
+
+          <div id="dealMessage" class="message"></div>
+          <div class="table-wrap ledger-wrap">
+            <table id="orderRegisterTable"></table>
+          </div>
+        </section>
+
+        <section id="receipts" class="view">
+          <div class="section-head">
+            <div>
+              <h2>回单制作</h2>
+              <p>只显示已成交挂单；确认客户名称和保证金比例后生成回单，自动带我司抬头。</p>
+            </div>
+            <div class="button-row">
+              <button id="generateReceiptsBtn" class="primary-button">生成回单</button>
+              <button id="copyReceiptsBtn" class="secondary-button">复制全部</button>
+              <button id="printReceiptsBtn" class="secondary-button">打印</button>
+            </div>
+          </div>
+
+          <div class="receipt-controls">
+            <label>
+              <span>成交挂单</span>
+              <select id="receiptCustomer"></select>
+            </label>
+            <label>
+              <span>客户名称</span>
+              <input id="receiptTitle" type="text" placeholder="填写回单客户名称" />
+            </label>
+            <label>
+              <span>保证金比例</span>
+              <input id="receiptMarginRatio" type="number" step="0.01" placeholder="例如：10 或 5" />
+            </label>
+            <div class="readonly-note">
+              <span>保证金取整</span>
+              <strong>四舍五入到万</strong>
+            </div>
+          </div>
+          <div id="receiptTitleNotice" class="title-notice" hidden></div>
+          <pre id="receiptOutput" class="receipt-output"></pre>
+        </section>
+
+        <section id="ledger" class="view">
+          <div class="section-head">
+            <div>
+              <h2>登记表</h2>
+              <p>这里是完整挂单登记表，内容修改后会自动保存。</p>
+            </div>
+            <div class="button-row">
+              <button id="exportLedgerBtn" class="primary-button">导出Excel</button>
+              <button id="copyLedgerBtn" class="secondary-button">复制表格</button>
+            </div>
+          </div>
+          <div class="table-wrap ledger-wrap">
+            <table id="ledgerTable"></table>
+          </div>
+        </section>
+
+        <section id="settings" class="view">
+          <div class="section-head">
+            <div>
+              <h2>系统设置</h2>
+              <p>以下规则只保存到当前登录账号的云端数据，不会写入公开代码库。</p>
+            </div>
+            <button id="saveRulesBtn" class="primary-button">保存规则</button>
+          </div>
+          <div class="settings-grid">
+            <label><span>无锡复新期货公司关键词</span><input id="fuxinPatternsInput" type="text" placeholder="用逗号分隔" /></label>
+            <label><span>艺玺体系客户名称</span><input id="yixiCustomersInput" type="text" placeholder="用逗号分隔客户名称" /></label>
+            <label><span>艺玺体系授权代表</span><input id="yixiContactInput" type="text" placeholder="授权代表姓名" /></label>
+          </div>
+          <div id="rulesMessage" class="message"></div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="./cloud-config.js"></script>
+    <script src="./app.js?v=cloud-20260811a"></script>
+  </body>
+</html>
