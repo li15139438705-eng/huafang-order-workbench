@@ -1,5 +1,4 @@
 const STORAGE_KEY = "hf-workbench-v1";
-const DUAL_INTERNAL_TITLE = "华方和复新均可";
 
 const HOLIDAYS_2026 = new Set([
   "2026-01-01", "2026-01-02", "2026-01-03",
@@ -283,7 +282,8 @@ async function signUpWithPassword() {
     showMessage(els.authMessage, "注册成功。请到邮箱点击确认链接，再回来登录。", "ok");
   }
 }
- async function signOut() {
+
+async function signOut() {
   if (!confirm("确认退出当前云端账号吗？本机缓存不会被删除。")) return;
   await cloudClient.auth.signOut();
   currentUser = null;
@@ -597,6 +597,7 @@ function clearOrderInput() {
   resetOrderInput();
   showMessage(els.orderMessage, "已清空挂单输入。", "ok");
 }
+
 function resetOrderInput() {
   els.orderInput.value = "";
   lastOrderCheck = null;
@@ -640,15 +641,6 @@ function checkOrder() {
     return;
   }
   order = completeOrderFromQuote(order, quote);
-  const dualTitleQuote = isDualInternalTitle(titleForQuote(quote));
-  if (dualTitleQuote && !order.requestedTitle) {
-    const confirmedTitle = promptActualOrderTitle("这条封存报价可使用江苏华方或无锡复新抬头，但客户挂单没有注明抬头。请确认本次实际挂单抬头。");
-    if (!confirmedTitle) {
-      showMessage(els.orderMessage, "已取消：双抬头结构必须确认本次实际使用的合同抬头，才能继续挂单。", "warn");
-      return;
-    }
-    order.internalTitle = confirmedTitle;
-  }
   const yixiAffiliate = isYixiAffiliateOrder(order);
   if (yixiAffiliate) {
     order.internalTitle = "无锡复新";
@@ -665,7 +657,7 @@ function checkOrder() {
   const basisMismatch = quote.basis !== order.basis;
   const qtySpecial = !isStandardDailyQty(order.dailyQty);
   lastOrderCheck = { order, quote, basisMismatch, qtySpecial, directDeliveryRemark, registered: false };
-  if (basisMismatch || qtySpecial || yixiAffiliate || dualTitleQuote || order.requestedTitle) {
+  if (basisMismatch || qtySpecial || yixiAffiliate) {
     const diff = order.basis - quote.basis;
     const messages = [];
     if (yixiAffiliate) {
@@ -681,20 +673,13 @@ function checkOrder() {
     if (qtySpecial) {
       messages.push(`每日量 ${order.dailyQty} 吨不是 11 吨的倍数，系统将按客户原始数量 ${order.dailyQty} 吨发期货公司并登记`);
     }
-    if (dualTitleQuote) {
-      messages.push(order.requestedTitle
-        ? `该期货公司为双抬头可做，已按客户注明的【${order.requestedTitle}】抬头匹配；请再次核对后再挂`
-        : `该期货公司为双抬头可做，本次已确认使用【${order.internalTitle}】抬头；请再次核对后再挂`);
-    } else if (order.requestedTitle) {
-      messages.push(`已按客户注明的【${order.requestedTitle}】抬头匹配`);
-    }
     showMessage(
       els.orderMessage,
       `结构匹配，请挂到【${quote.futureCompany || "未填期货公司"}】，合同抬头【${order.internalTitle || titleForQuote(quote)}】；但需要确认：${messages.join("；")}。`,
       "warn"
     );
   } else {
-    showMessage(els.orderMessage, `结构匹配，请挂到【${quote.futureCompany || "未填期货公司"}】，合同抬头【${order.internalTitle || titleForQuote(quote)}】。`, "ok");
+    showMessage(els.orderMessage, `结构匹配，请挂到【${quote.futureCompany || "未填期货公司"}】，合同抬头【${titleForQuote(quote)}】。`, "ok");
   }
 }
 
@@ -770,23 +755,6 @@ function registerDeals() {
     return;
   }
 
-  const dualTitleRecords = [];
-  for (const item of records) {
-    const quoteTitle = titleForQuote(item.quote);
-    item.deal.internalTitle = item.deal.requestedTitle || quoteTitle;
-    if (isDualInternalTitle(quoteTitle)) {
-      if (!item.deal.requestedTitle) {
-        const confirmedTitle = promptActualOrderTitle(`第 ${records.indexOf(item) + 1} 笔挂单匹配到双抬头结构，但客户未注明抬头。请确认本次实际挂单抬头。`);
-        if (!confirmedTitle) {
-          showMessage(els.dealMessage, "已取消：双抬头结构必须确认本次实际使用的合同抬头，才能登记。", "warn");
-          return;
-        }
-        item.deal.internalTitle = confirmedTitle;
-      }
-      dualTitleRecords.push(item);
-    }
-  }
-
   state.lastDealInput = text;
   const start = nextSequence();
   records.forEach((item, index) => {
@@ -795,13 +763,7 @@ function registerDeals() {
   normalizeRecordSequences(state.records, state.workDate);
   saveState();
   renderAll();
-  showMessage(
-    els.dealMessage,
-    dualTitleRecords.length
-      ? `已核对并登记 ${records.length} 笔挂单，状态为在挂。注意：其中 ${dualTitleRecords.length} 笔为华方/复新均可结构，已按客户注明或人工确认的抬头登记，请再次核对。`
-      : `已核对并登记 ${records.length} 笔挂单，状态为在挂。`,
-    dualTitleRecords.length ? "warn" : "ok"
-  );
+  showMessage(els.dealMessage, `已核对并登记 ${records.length} 笔挂单，状态为在挂。`, "ok");
 }
 
 function parseQuotes(text, options = {}) {
@@ -896,7 +858,7 @@ function parseTableTextQuoteRows(text, options) {
       basis,
       payoff,
       huafangBasis,
-            source: "image",
+      source: "image",
     });
   });
   return dedupeQuotes(rows);
@@ -1025,10 +987,8 @@ function parseSingleOrder(text) {
   const lines = text.split(/\r?\n/).map((line) => cleanLine(line)).filter(Boolean);
   const firstLine = lines.find((line) => parseChineseDate(line) && /%/.test(line)) || lines[0] || "";
   const date = parseChineseDate(compact) || state.workDate;
-  const requestedTitle = parseRequestedInternalTitle(firstLine);
   const ratioMatch = compact.match(/(\d+(?:\.\d+)?)\s*%/);
-  const customerLine = lines.find((line) => /[@＠]/.test(line)) || firstLine;
-  const customer = parseCustomer(customerLine);
+  const customer = parseCustomer(firstLine);
   const meta = compact.match(/([一二两三四五六七八九十\d]+倍).*?(\d+)\s*个?交易日.*?(\d{1,2})[.\-/月](\d{1,2})\s*到期/);
   const type = compact.includes("熔断累沽") ? "熔断累沽" : compact.includes("熔断累购") ? "熔断累购" : "";
   const marketEntry = isMarketEntry(compact);
@@ -1038,7 +998,6 @@ function parseSingleOrder(text) {
   return {
     sourceText: text,
     date,
-    requestedTitle,
     contract: basisMonth ? contractCodeForMonth(basisMonth) : "",
     basisMonth,
     customer,
@@ -1057,13 +1016,6 @@ function parseSingleOrder(text) {
     dailyQty: readDailyQty(compact),
     remark: compact.includes("响水直发") ? "响水直发" : (compact.includes("直发") ? "直发" : ""),
   };
-}
-
-function parseRequestedInternalTitle(firstLine) {
-  const text = cleanLine(firstLine || "");
-  if (/(?:无锡)?复新\s*抬头|复兴\s*抬头/.test(text)) return "无锡复新";
-  if (/(?:江苏)?华方\s*抬头/.test(text)) return "江苏华方";
-  return "";
 }
 
 function parseDeals(text) {
@@ -1090,10 +1042,7 @@ function splitDealBlocks(text) {
 }
 
 function parseCustomer(line) {
-  const raw = cleanLine(line);
-  const contactMatch = raw.match(/[@＠]\s*(.+)$/);
-  if (contactMatch) return contactMatch[1].trim();
-  let value = raw
+  let value = cleanLine(line)
     .replace(/\d{1,2}[.\-/月]\d{1,2}\s*日?/, "")
     .replace(/\d+(?:\.\d+)?\s*%/, "")
     .trim();
@@ -1112,7 +1061,6 @@ function findMatchingQuote(order) {
     (order.upper === null || quote.upper === order.upper) &&
     (order.lower === null || quote.lower === order.lower) &&
     (order.payoff === null || quote.payoff === order.payoff) &&
-    quoteMatchesRequestedTitle(quote, order.requestedTitle) &&
     (!includeBasis || order.basis === null || quote.basis === order.basis)
   );
   const exact = matches(true);
@@ -1132,8 +1080,7 @@ function findStructuralQuote(order) {
     quote.dueDate === order.dueDate &&
     quote.upper === order.upper &&
     quote.lower === order.lower &&
-    quote.payoff === order.payoff &&
-    quoteMatchesRequestedTitle(quote, order.requestedTitle)
+    quote.payoff === order.payoff
   );
 }
 
@@ -1165,7 +1112,6 @@ function quoteCandidates(order, includeBasis) {
     if (order.upper !== null && quote.upper !== order.upper) return false;
     if (order.lower !== null && quote.lower !== order.lower) return false;
     if (order.payoff !== null && quote.payoff !== order.payoff) return false;
-    if (!quoteMatchesRequestedTitle(quote, order.requestedTitle)) return false;
     if (includeBasis && order.basis !== null && quote.basis !== order.basis) return false;
     return true;
   });
@@ -1176,7 +1122,7 @@ function completeOrderFromQuote(order, quote) {
     ...order,
     contract: quote.contract || order.contract || state.contractCode,
     basisMonth: contractMonthFromCode(quote.contract) || order.basisMonth,
-    internalTitle: order.requestedTitle || titleForQuote(quote),
+    internalTitle: titleForQuote(quote),
     product: quote.product || order.product || "冷轧",
     multiplier: order.multiplier || quote.multiplier || "二倍",
     days: order.days || quote.days,
@@ -1196,7 +1142,7 @@ function inferDirectDeliveryRemark(order, quote) {
   if (!Number.isFinite(customerBasis) || !Number.isFinite(normalBasis)) return "";
   const difference = customerBasis - normalBasis;
   if (Math.abs(difference - 50) < 0.001) return "响水直发";
-    if (Math.abs(difference - 30) < 0.001) return "直发";
+  if (Math.abs(difference - 30) < 0.001) return "直发";
   return "";
 }
 
@@ -1227,9 +1173,6 @@ function explainMismatch(order) {
   if (!sameRange.length) return "上区间或下区间不一致";
   const sameBasis = sameRange.filter((quote) => quote.basis === order.basis);
   if (!sameBasis.length) return "现货毛基不一致";
-  if (order.requestedTitle && !sameBasis.some((quote) => quoteMatchesRequestedTitle(quote, order.requestedTitle))) {
-    return `客户注明抬头【${order.requestedTitle}】与封存结构不匹配`;
-  }
   return "敲出赔付不一致";
 }
 
@@ -1323,14 +1266,11 @@ function setOrderRoute(quote, order = null) {
   }
   const company = quote.futureCompany || "未填期货公司";
   const yixiAffiliate = isYixiAffiliateOrder(order);
-  const quoteTitle = titleForQuote(quote);
-  const title = yixiAffiliate ? "无锡复新" : (order?.internalTitle || quoteTitle);
+  const title = yixiAffiliate ? "无锡复新" : titleForQuote(quote);
   els.orderRoute.hidden = false;
   els.orderRoute.innerHTML = yixiAffiliate
     ? `艺玺体系特别规则：请挂到 <strong>${escapeHtml(`${company}复新群`)}</strong>，合同抬头固定为 <strong>无锡复新</strong>`
-    : isDualInternalTitle(quoteTitle)
-      ? `请挂到：<strong>${escapeHtml(company)}</strong>。本结构为<strong>华方和复新均可</strong>，本次合同抬头：<strong>${escapeHtml(title)}</strong>${order?.requestedTitle ? "（已按客户注明抬头匹配）" : "（已人工确认）"}`
-      : `请挂到：<strong>${escapeHtml(company)}</strong>，合同抬头：<strong>${escapeHtml(title)}</strong>`;
+    : `请挂到：<strong>${escapeHtml(company)}</strong>，合同抬头：<strong>${escapeHtml(title)}</strong>`;
 }
 
 function setReceiptTitleNotice(record) {
@@ -1360,16 +1300,6 @@ function internalTitleForCompany(company) {
 
 function titleForQuote(quote) {
   return normalizeInternalTitle(quote?.internalTitle) || internalTitleForCompany(quote?.futureCompany);
-}
-
-function isDualInternalTitle(value) {
-  return normalizeInternalTitle(value) === DUAL_INTERNAL_TITLE;
-}
-
-function quoteMatchesRequestedTitle(quote, requestedTitle) {
-  if (!requestedTitle) return true;
-  const quoteTitle = titleForQuote(quote);
-  return isDualInternalTitle(quoteTitle) || quoteTitle === requestedTitle;
 }
 
 function isYixiAffiliateOrder(order) {
@@ -1413,25 +1343,12 @@ function ensureTitlesForQuotes(quotes, message) {
 
 function promptInternalTitle(message) {
   for (let i = 0; i < 3; i += 1) {
-    const choice = prompt(`${message}\n\n请选择合同抬头：\n1 或 华方 = 江苏华方\n2 或 复新/复兴 = 无锡复新\n3 或 双抬头/都可 = 华方和复新均可`, "");
-    if (choice === null) return "";
-    const text = choice.trim();
-    if (text === "3" || text.includes("双抬头") || text.includes("都可") || text.includes("均可") || text.includes("华方和复新")) return DUAL_INTERNAL_TITLE;
-    if (text === "1" || text.includes("华方") || text.includes("江苏华方")) return "江苏华方";
-    if (text === "2" || text.includes("复新") || text.includes("复兴") || text.includes("无锡复新")) return "无锡复新";
-    alert("请输入 1/华方、2/复新，或 3/双抬头。");
-  }
-  return "";
-}
-
-function promptActualOrderTitle(message) {
-  for (let i = 0; i < 3; i += 1) {
-    const choice = prompt(`${message}\n\n请输入：1 或 华方 = 江苏华方；2 或 复新/复兴 = 无锡复新`, "");
+    const choice = prompt(`${message}\n\n请选择合同抬头：\n1 或 华方 = 江苏华方\n2 或 复新/复兴 = 无锡复新`, "");
     if (choice === null) return "";
     const text = choice.trim();
     if (text === "1" || text.includes("华方") || text.includes("江苏华方")) return "江苏华方";
     if (text === "2" || text.includes("复新") || text.includes("复兴") || text.includes("无锡复新")) return "无锡复新";
-    alert("本次实际挂单必须选择华方或复新，请输入 1/华方 或 2/复新。");
+    alert("请输入 1/华方，或 2/复新。");
   }
   return "";
 }
@@ -1451,7 +1368,6 @@ function resolveTitleAmbiguity(quotes) {
 function normalizeInternalTitle(value) {
   const text = String(value || "").trim();
   if (!text) return "";
-  if (text.includes("双抬头") || text.includes("都可") || text.includes("均可") || text.includes("华方和复新")) return DUAL_INTERNAL_TITLE;
   if (text === "复新" || text.includes("无锡复新")) return "无锡复新";
   if (text === "华方" || text.includes("江苏华方")) return "江苏华方";
   return text;
@@ -1495,6 +1411,7 @@ function requiredOrderBasics(order) {
   if (!order.dailyQty) fields.push("每日量");
   return fields;
 }
+
 function requiredDealMissing(deal) {
   return requiredOrderMissing(deal);
 }
@@ -1795,7 +1712,7 @@ function receiptText(record) {
   const margin = Math.round(marginRaw / 10000) * 10000;
   const contractType = record.type === "熔断累购" ? "熔断累购采购" : "熔断累沽销售";
   const internalTitle = internalTitleForRecord(record);
-    const remark = withInternalTitleRemark(record.remark || "", internalTitle);
+  const remark = withInternalTitleRemark(record.remark || "", internalTitle);
   const remarkLine = remark ? `\n备注：${remark}` : "";
   const productLine = record.product === "热轧" ? "\n品种：热轧" : "";
   return `我司抬头：${internalTitle}
@@ -1862,7 +1779,6 @@ function renderTable(table, rows, forcedHeaders = null, options = {}) {
 function renderDetails(node, order) {
   const items = {
     客户: order.customer || "未识别",
-    客户注明抬头: order.requestedTitle || "未注明",
     品种: order.product || "未识别",
     保证金比例: order.marginRatio === null ? "未识别" : `${order.marginRatio * 100}%`,
     类型: order.type || "未识别",
@@ -2095,7 +2011,7 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-  }
+}
 
 function escapeAttr(value) {
   return escapeHtml(value);
