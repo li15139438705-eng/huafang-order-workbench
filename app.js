@@ -283,6 +283,18 @@ async function signUpWithPassword() {
     showMessage(els.authMessage, "注册成功。请到邮箱点击确认链接，再回来登录。", "ok");
   }
 }
+ async function signOut() {
+  if (!confirm("确认退出当前云端账号吗？本机缓存不会被删除。")) return;
+  await cloudClient.auth.signOut();
+  currentUser = null;
+  clearInterval(cloudPollTimer);
+  els.signOutBtn.hidden = true;
+  els.authPassword.value = "";
+  els.authGate.hidden = false;
+  setStorageStatus("已退出，仅保留本机缓存", "warn");
+}
+
+async function activateCloudSession(user) {
   currentUser = user;
   els.authGate.hidden = true;
   els.signOutBtn.hidden = false;
