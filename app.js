@@ -1033,7 +1033,7 @@ function parseSingleOrder(text) {
     entryPrice: marketEntry ? "市价" : readEntryPrice(compact),
     marketEntry,
     dailyQty: readDailyQty(compact),
-    remark: compact.includes("响水直发") ? "响水直发" : (compact.includes("直发") ? "直发" : ""),
+    remark: (compact.includes("响水明细") || compact.includes("响水直发")) ? "响水明细" : (compact.includes("直发") ? "直发" : ""),
   };
 }
 
@@ -1164,12 +1164,13 @@ function completeOrderFromQuote(order, quote) {
 }
 
 function inferDirectDeliveryRemark(order, quote) {
-  if (order.remark === "响水直发" || order.remark === "直发") return order.remark;
+  if (order.remark === "响水明细" || order.remark === "响水直发") return "响水明细";
+  if (order.remark === "直发") return "直发";
   const customerBasis = Number(order.basis);
   const normalBasis = Number(quote?.basis);
   if (!Number.isFinite(customerBasis) || !Number.isFinite(normalBasis)) return "";
   const difference = customerBasis - normalBasis;
-  if (Math.abs(difference - 50) < 0.001) return "响水直发";
+  if (Math.abs(difference - 50) < 0.001) return "响水明细";
   if (Math.abs(difference - 30) < 0.001) return "直发";
   return "";
 }
